@@ -53,11 +53,9 @@ void ProcessFiles(
         dec.logLevel = errMin;
         // we'll override output, so we can block it on errorOnly dumps
         stringstream s;
-        s << "\n\nDecoding " << fn << endl;
         dec.output = [&](const string& msg) {s << msg; };
         fileCount++;
         try {
-            cout << "Decoding " << fn << "\n";
             Decode(fn, dec);
             if (dec.errorCount == 0 && saveFile)
                 WritePPM("out.ppm", dec);
@@ -92,7 +90,7 @@ int main()
     auto processLocation = "jpegtests";
 
     LogType minLevel = LogType::INFO;
-    bool transcodeFile = true; // saves as "out.ppm"
+    bool transcodeFile = false; // saves as "out.ppm"
     bool dumpOnErrorOnly = false;
 
     ProcessFiles(

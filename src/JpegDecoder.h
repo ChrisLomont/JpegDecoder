@@ -304,17 +304,20 @@ namespace Lomont::Jpeg
             int numHT = b & 7; // 0-3 used, else error
             int ACDC = (b >> 4) & 1; // 0 = DC, 1 = AC
             // bits 5-7 should be 0
-            dec.logv(format("DHT: ac {} num {}\n", ACDC, numHT));
+            dec.logi(format("  AC {} num {}\n", ACDC, numHT));
             auto& tree = dec.tree[ACDC][numHT];
 
+            dec.logi("  tbl: ");
             int len[16] = { 0 }, sum = 0, max = 0;
             for (int i = 0; i < 16; i++)
             {
                 len[i] = dec.read();
+                dec.logi(format("{}:{} ", i+1,len[i]));
                 sum += len[i];
                 if (len[i] > 0)
                     max = i + 1;
             }
+            dec.logi("\n");
 
             tree.resize((1 << (max + 1)) + 1); // possible 2^max present nodes, +1 for 1 indexed
             for (int j = 0; j < tree.size(); ++j)
@@ -375,7 +378,7 @@ namespace Lomont::Jpeg
         int w = read2(dec);
         int channels = dec.read(); // 1 = gray, 3 = YCbCr or YIQ, 4 = CMYK rare
         dec.image->Resize(w, h, channels);
-        dec.logi(format("SOF: {}x{} {} channels, {} bits/sample\n", w, h, channels, bitsPerSample));
+        dec.logi(format("   {}x{} {} channels, {} bits/sample\n", w, h, channels, bitsPerSample));
         if (dec.channels == 4)
             dec.loge("4 channel CMYK JPEG not supported\n");
 
@@ -383,7 +386,7 @@ namespace Lomont::Jpeg
 
         for (int k = 0; k < channels; ++k)
         {
-            static string chans[] = { "??","Y","Cb","Cr","I","","Q" };
+            static string chans[] = { "??","Y ","Cb","Cr","I ","  ","Q " };
             auto t1 = dec.read(); // 1=Y,2=Cb,3=Cr,4=I,5=Q
             auto t2 = dec.read(); // sampling factors, 4 bits each
             auto t3 = dec.read(); // quant table number
@@ -397,7 +400,7 @@ namespace Lomont::Jpeg
                 ch = chans[t1];
             assert(dec.channels == 4 || k == 0 || (t2 == 0x11)); // all chroma forms allowed look like nxn, 1x1, 1x1
             //   assert(dec.channels == 4 ||  dec.chdefs[k].samplingH == dec.chdefs[k].samplingV);// always true?
-            dec.logi(format("  - {}: {} sampling {}x{} qtbl {}\n", k, ch, (t2 >> 4), (t2 & 15), t3));
+            dec.logi(format("   - {}: {} sampling {}x{} qtbl {}\n", k, ch, (t2 >> 4), (t2 & 15), t3));
         }
         /* usual
          else decoder needs subsampling
@@ -895,7 +898,7 @@ namespace Lomont::Jpeg
            // assert(numCom == 4 || (dcNum == acdc && acNum == acdc));
             if (numCom != 4 && (dcNum != acdc || acNum != acdc))
                 dec.logw("Weird ac,dc entries in SOS\n");
-            dec.logi(format("SOS {}: cid {} ac {} dc {}\n", i, cID, acNum, dcNum));
+            dec.logi(format("   {}: cid {} ac {} dc {}\n", i, cID, acNum, dcNum));
         }
         // skip 3
         auto ss = dec.read(); // Ss - where to put first DC coeff, should be 0 in baseline
@@ -907,9 +910,7 @@ namespace Lomont::Jpeg
 
         DecodeImg(dec);
 
-        // todo ?  assert(dec.lastCode == 0xFFDA); // else something else, maybe a restart (not impl yet)
-
-        return dec.lastCode == 0xFFDA; // end file
+        return true;
     }
 
     // try to detect a specific Application extension
@@ -951,10 +952,8 @@ namespace Lomont::Jpeg
 
         if (hasJFIF)
         {
-            dec.logi(format("APP-0: Has JFIF info of length {}\n", data.size()));
             JFIFDecoder jf;
             jf.Decode(dec,data);
-
         }
         else
             dec.loge(format("Unsupported marker APP-0\n"));
@@ -1127,7 +1126,7 @@ namespace Lomont::Jpeg
             char c = dec.read(); // NOTE: COM string may or may not have 0 terminator
             s += c;
         }
-        dec.logi(format("COM: {}\n", s));
+        dec.logi(format("  <{}>\n", s));
         return true;
     }
 
@@ -1254,29 +1253,44 @@ namespace Lomont::Jpeg
     bool DecodeJpg(JpegDecoder& dec)
     {
         bool more = true;
+        bool sawEOI = false;
         while (more && dec.lastCode == -1)
         {
             int offset = dec.offset;
-            uint16_t seg = read2(dec);
+            const uint16_t seg = read2(dec);
             string txt = "???";
-
+            int length = 0; // default
             if (0xFFC0 <= seg)
             {
                 dec.seg = seg;
                 const auto& j = jumps[seg - 0xFFC0];
+                if (j.txt != "SOI" && j.txt != "EOI")
+                {
+	                const int off1 = dec.offset;
+                    length = read2(dec);
+                    dec.offset = off1;
+                }
+                dec.logi(format("Marker: {} ({:02X}) offset {:08X} length {}\n",j.txt, j.code,offset, length));
                 more = j.func(dec);
                 txt = j.txt;
+                if (j.txt == "EOI")
+                    sawEOI = true;
             }
             else
             {
-                dec.loge(format("Unknown marker {:02X}, offset {} exiting.\n", seg, offset));
+                dec.loge(format("Unknown marker {:02X}, offset {:08X} exiting.\n", seg, offset));
                 skipNext(dec);
                 more = false;
 
             }
-            int len = dec.offset - offset;
-            dec.logv(format("Offset {}, marker {}, {:02X}, len {}\n", offset, txt, seg, len));
+            const int actualLength = dec.offset - offset - 2; // remove 2 byte marker length
+            if (length != actualLength && seg != 0xFFDA /* SOS */)
+	            dec.logw(format("Marker predicted length {} != marker actual length {}\n",length, actualLength));
         }
+        if (dec.offset < dec.d.size())
+            dec.logw(format("{} bytes past end of file\n", dec.d.size() - dec.offset));
+        if (!sawEOI)
+            dec.logw("Did not parse EOI marker\n");
         return true;
     }
 
@@ -1330,7 +1344,7 @@ namespace Lomont::Jpeg
         if (!dec.output)
             dec.output = [](const string& msg) {cout << msg; };
 
-        dec.logi(format(" filename {} has length {}\n", filename, d.size()));
+        dec.logi(format("Filename: {}\nFilesize: {}\n", filename, d.size()));
 
         DecodeJpg(dec);
     }
