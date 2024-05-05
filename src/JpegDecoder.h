@@ -26,6 +26,7 @@
 #include "IccDec.h"
 #include "XmpDec.h"
 #include "MpfDec.h"
+#include "UltraHdr.h"
 
 
 namespace Lomont::Jpeg
@@ -161,6 +162,10 @@ namespace Lomont::Jpeg
         function<bool(Logger& logger, const vector<uint8_t>& data)> exifDecoder{ nullptr };
         function<bool(Logger& logger, const vector<uint8_t>& data)> xmpDecoder{ nullptr };
         function<bool(Logger& logger, const vector<uint8_t>& data)> mpfDecoder{ nullptr };
+
+        // help debugging messages
+        uint16_t currentMarkerCode;
+        string currentMarkerText;
 
     };
 
@@ -633,19 +638,28 @@ namespace Lomont::Jpeg
 #undef RIGHT
 #undef LEFT
 
-    void DumpPrefix(JpegDecoder& dec, const vector<uint8_t>& buffer)
+    string DumpPrefix(JpegDecoder& dec, const vector<uint8_t>& buffer, bool logData = true)
     {
         int len = buffer.size();
         if (len > 50) len = 50;
-        cout << "Data: ";
+        string prefix;
+        bool inPrefix = true;
+        string s = "Data: ";
         for (auto i = 0; i < len; ++i)
         {
             char c = buffer[i];
-            if (c < 0) c = '.';
-            if (c < 32 || 127 < c) c = '.';
-            cout << c;
+            if (c < 32 || 127 < c) {
+                inPrefix = false;
+                c = '.';
+            }
+            s += c;
+            if (inPrefix)
+                prefix += c;
         }
-        cout << endl;
+        s += "\n";
+        if (logData)
+			dec.logi(s);
+        return prefix;
     }
 
 
@@ -944,6 +958,16 @@ namespace Lomont::Jpeg
 
     }
 
+    void LogUnsupportedAppMarker(JpegDecoder & dec, const vector<uint8_t> & input, bool logData = false)
+    {
+        auto prefix = DumpPrefix(dec, input, logData);
+
+        dec.loge(format("Unsupported marker {} {:04X} {}\n",
+            dec.currentMarkerText, dec.currentMarkerCode,
+            prefix
+            ));
+    }
+
     bool DecodeApp0(JpegDecoder& dec)
     {
         vector<uint8_t> data, input;
@@ -953,10 +977,10 @@ namespace Lomont::Jpeg
         if (hasJFIF)
         {
             JFIFDecoder jf;
-            jf.Decode(dec,data);
+            jf.Decode(dec, data);
         }
         else
-            dec.loge(format("Unsupported marker APP-0\n"));
+            LogUnsupportedAppMarker(dec,input);
         return true;
     }
 
@@ -989,6 +1013,11 @@ namespace Lomont::Jpeg
             if (dec.xmpDecoder)
             {
                 success = dec.xmpDecoder(dec, data);
+                if (success)
+                {
+                    UltraHdr hdr;
+                    hdr.ParseXmp(dec, data);
+                }
             }
         }
         else if (DecodeApp(dec, ans, input, data))
@@ -997,8 +1026,7 @@ namespace Lomont::Jpeg
             dec.logw("  - Adobe format not supported\n");
         }
         else {
-            dec.loge(format("Unsupported marker APP-1\n"));
-            DumpPrefix(dec, input);
+            LogUnsupportedAppMarker(dec, input);
         }
 
         return true;
@@ -1051,10 +1079,8 @@ namespace Lomont::Jpeg
             dec.logi(format("APP-2: Has FlashPix profile of length {}\n", data.size()));
             dec.logw("   - FlashPIX not supported\n");
         }
-        else
-        {
-            dec.loge(format("Unsupported marker APP-2\n"));
-            DumpPrefix(dec, input);
+        else {
+            LogUnsupportedAppMarker(dec, input);
         }
         return true;
     }
@@ -1071,10 +1097,8 @@ namespace Lomont::Jpeg
         }
         else
         {
-            dec.loge(format("Unsupported marker APP-12 FFEC\n"));
-            DumpPrefix(dec, input);
+            LogUnsupportedAppMarker(dec, input);
         }
-
         return true;
     }
 
@@ -1088,8 +1112,9 @@ namespace Lomont::Jpeg
             dec.logw("  - format parse not implemented\n");
         }
         else
-            dec.loge(format("Unsupported marker APP-13 FFED\n"));
-
+        {
+            LogUnsupportedAppMarker(dec, input);
+        }
         return true;
     }
 
@@ -1109,10 +1134,9 @@ namespace Lomont::Jpeg
         }
         else
         {
-            dec.loge(format("Unsupported marker APP-14\n"));
-            DumpPrefix(dec, input);
+            LogUnsupportedAppMarker(dec, input);
         }
-        return true;
+    	return true;
     }
 
     bool DecodeCOM(JpegDecoder& dec)
@@ -1151,13 +1175,11 @@ namespace Lomont::Jpeg
 
     bool Unsupported(JpegDecoder& dec)
     {
-        dec.loge(format("unsupported marker {:02X}\n", dec.seg));
         vector<uint8_t> input;
         ReadSegment(dec, input);
-        DumpPrefix(dec, input);
 
+        LogUnsupportedAppMarker(dec, input, true);
 
-        //skipNext(dec);
         return true;
     }
     bool Succeed(JpegDecoder& dec)
@@ -1252,45 +1274,55 @@ namespace Lomont::Jpeg
 
     bool DecodeJpg(JpegDecoder& dec)
     {
-        bool more = true;
-        bool sawEOI = false;
-        while (more && dec.lastCode == -1)
-        {
-            int offset = dec.offset;
-            const uint16_t seg = read2(dec);
-            string txt = "???";
-            int length = 0; // default
-            if (0xFFC0 <= seg)
+        bool moreBytes = false;
+        do { // loop over MultiPictureFormat when present
+            moreBytes = false; // assume no extra
+            bool more = true;
+            bool sawEOI = false;
+            while (more && dec.lastCode == -1)
             {
-                dec.seg = seg;
-                const auto& j = jumps[seg - 0xFFC0];
-                if (j.txt != "SOI" && j.txt != "EOI")
+                int offset = dec.offset;
+                const uint16_t seg = read2(dec);
+                string txt = "???";
+                int length = 0; // default
+                if (0xFFC0 <= seg)
                 {
-	                const int off1 = dec.offset;
-                    length = read2(dec);
-                    dec.offset = off1;
+                    dec.seg = seg;
+                    const auto& j = jumps[seg - 0xFFC0];
+                    if (j.txt != "SOI" && j.txt != "EOI")
+                    {
+                        const int off1 = dec.offset;
+                        length = read2(dec);
+                        dec.offset = off1;
+                    }
+                    dec.currentMarkerCode = j.code;
+                    dec.currentMarkerText = j.txt;
+                    dec.logi(format("Marker: {} ({:02X}) offset {:08X} length {}\n", j.txt, j.code, offset, length));
+                    more = j.func(dec);
+                    txt = j.txt;
+                    if (j.txt == "EOI")
+                        sawEOI = true;
                 }
-                dec.logi(format("Marker: {} ({:02X}) offset {:08X} length {}\n",j.txt, j.code,offset, length));
-                more = j.func(dec);
-                txt = j.txt;
-                if (j.txt == "EOI")
-                    sawEOI = true;
-            }
-            else
-            {
-                dec.loge(format("Unknown marker {:02X}, offset {:08X} exiting.\n", seg, offset));
-                skipNext(dec);
-                more = false;
+                else
+                {
+                    dec.loge(format("Unknown marker {:02X}, offset {:08X} exiting.\n", seg, offset));
+                    skipNext(dec);
+                    more = false;
 
+                }
+                const int actualLength = dec.offset - offset - 2; // remove 2 byte marker length
+                if (length != actualLength && seg != 0xFFDA /* SOS */)
+                    dec.logw(format("Marker predicted length {} != marker actual length {}\n", length, actualLength));
             }
-            const int actualLength = dec.offset - offset - 2; // remove 2 byte marker length
-            if (length != actualLength && seg != 0xFFDA /* SOS */)
-	            dec.logw(format("Marker predicted length {} != marker actual length {}\n",length, actualLength));
-        }
-        if (dec.offset < dec.d.size())
-            dec.logw(format("{} bytes past end of file\n", dec.d.size() - dec.offset));
-        if (!sawEOI)
-            dec.logw("Did not parse EOI marker\n");
+            if (dec.offset < dec.d.size())
+            {
+                dec.logw(format("{} bytes past end of file\n", dec.d.size() - dec.offset));
+                moreBytes = true;
+            }
+            if (!sawEOI)
+                dec.logw("Did not parse EOI marker\n");
+
+        } while (moreBytes);
         return true;
     }
 

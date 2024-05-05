@@ -43,7 +43,7 @@ namespace Lomont::Jpeg {
 				//   - 2 byte data format
 				//   - 4 bytes # of components
 				//   - 4 byte offset to data
-			dec->logi(format("Mpf has {} entries\n", ifds.size()));
+			dec->logi(format("Multi-Picture Format has {} entries\n", ifds.size()));
 			for (auto& ifd : ifds)
 			{
 				auto t = GetTag(ifd.tag);

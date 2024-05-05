@@ -133,11 +133,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ExifDec.h" />
+    <ClInclude Include="src\HexDump.h" />
     <ClInclude Include="src\IccDec.h" />
     <ClInclude Include="src\JpegDecoder.h" />
     <ClInclude Include="src\MpfDec.h" />
     <ClInclude Include="src\Tiff.h" />
     <ClInclude Include="src\Types.h" />
+    <ClInclude Include="src\UltraHdr.h" />
     <ClInclude Include="src\XmpDec.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

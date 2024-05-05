@@ -83,7 +83,7 @@ void ProcessFiles(
     cout << format("{} files, {} with errors\n", fileCount, errorCount);
 }
 
-int main()
+int main(int argc, char * argv[])
 {
 
     // if name ends in jpg, does one file, else does recursive directory 
@@ -92,6 +92,15 @@ int main()
     LogType minLevel = LogType::INFO;
     bool transcodeFile = false; // saves as "out.ppm"
     bool dumpOnErrorOnly = false;
+
+    if (argc > 1)
+    {
+        processLocation = argv[1];
+        cout << processLocation << endl;
+    }
+
+    processLocation = "HDR/Pixel6-Original.jpg"; // 4080x3072x3 (Y,Cb,Cr), 1020x768x1 (Y) 
+    //processLocation = "HDR/Pixel6-LR-HDR-1.jpg"; // 4064x3056x3 8 bits (??,Y,Cb), 4064x3056x3 8 bits (??,Y,Cb) (Lightroom 3 channel HDR)
 
     ProcessFiles(
         processLocation,
