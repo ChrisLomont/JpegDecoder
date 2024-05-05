@@ -131,21 +131,25 @@ private:
          */
 
         const std::string num = R"xx((\d+(\.\d+)?))xx"; // grouped number
-        const auto linum = Tag("rdf", "li") + num + Tag("rdf", "li", false);
-
-
-        // open tags
-        const std::string tripleRegex =
-            // open tags
-            Tag("hdrgm",item) + Tag("rdf","Seq") +
-			// add 3 numbers
-			linum + linum + linum + 
-			// close tags
-			Tag("rdf","Seq",false) + Tag("hdrgm", item, false);
-    	
         const std::string singleRegex = R"xx(hdrgm:)xx" + item + "=\"" + num + "\"";
         const auto singleMatch = std::regex_search(text, match, std::regex{ singleRegex });
-        const auto vectorMatch = singleMatch || std::regex_search(text, match, std::regex{ tripleRegex });
+        auto vectorMatch = false;
+        if (!singleMatch)
+        {
+            // number in 'li' tag
+            const auto linum = Tag("rdf", "li") + num + Tag("rdf", "li", false);
+
+            // open tags
+            const std::string tripleRegex =
+                // open tags
+                Tag("hdrgm", item) + Tag("rdf", "Seq") +
+                // add 3 numbers
+                linum + linum + linum +
+                // close tags
+                Tag("rdf", "Seq", false) + Tag("hdrgm", item, false);
+
+            vectorMatch = std::regex_search(text, match, std::regex{ tripleRegex });
+        }
         if (singleMatch && match.size()>1)
         {
             // todo - error checking
@@ -158,8 +162,6 @@ private:
             values.push_back(std::stod(match.str(1)));
             values.push_back(std::stod(match.str(3)));
             values.push_back(std::stod(match.str(5)));
-            std::cout << "HDR VECTOR MATCH size " << match.size() << " val "  << match.str(0) << "\n";
-            std::cout << "  vals " << values[0] << ',' << values[1] << ',' << values[2] << std::endl;
             return true;
         }
         if (!required)

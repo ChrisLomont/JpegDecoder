@@ -19,9 +19,9 @@ namespace Lomont::Jpeg {
 			this->dec = &dec;
 			this->data = &data;
 
-			std::stringstream ss;
-			HexDump(data.data(), data.size(), ss, 16, 8);
-			dec.logi(std::format("XMP data:\n{}",ss.str()));
+			//std::stringstream ss;
+			//HexDump(data.data(), data.size(), ss, 16, 8);
+			//dec.logi(std::format("XMP data:\n{}",ss.str()));
 
 			return true;
 
