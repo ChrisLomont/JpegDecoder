@@ -135,16 +135,17 @@ private:
 
 
         // open tags
-        std::string tripleRegex = Tag("hdrgm",item) + Tag("rdf","Seq");
-        tripleRegex += linum + linum + linum;
-        tripleRegex += Tag("rdf","Seq",false) + Tag("hdrgm", item, false);
+        const std::string tripleRegex =
+            // open tags
+            Tag("hdrgm",item) + Tag("rdf","Seq") +
+			// add 3 numbers
+			linum + linum + linum + 
+			// close tags
+			Tag("rdf","Seq",false) + Tag("hdrgm", item, false);
     	
-        std::string singleRegex = R"xx(hdrgm:)xx";
-        singleRegex += item;
-        singleRegex += R"xx(="([-+]?\d+(\.\d+)?)")xx";
-        
-        auto singleMatch = std::regex_search(text, match, std::regex{ singleRegex });
-        auto vectorMatch = singleMatch || std::regex_search(text, match, std::regex{ tripleRegex });
+        const std::string singleRegex = R"xx(hdrgm:)xx" + item + "=\"" + num + "\"";
+        const auto singleMatch = std::regex_search(text, match, std::regex{ singleRegex });
+        const auto vectorMatch = singleMatch || std::regex_search(text, match, std::regex{ tripleRegex });
         if (singleMatch && match.size()>1)
         {
             // todo - error checking
