@@ -130,68 +130,40 @@ private:
 			</hdrgm:GainMapMin>
          */
 
-#if 1
         std::string ws = R"xx([\n\t\r ]*)xx"; // whitespace
         std::string num = R"xx([\n\r\t ]*<rdf:li>([+-]\d+(\.\d+)?)</rdf:li>)xx"; // grouped number
 
-        std::string pat2 =
-            //Tag(item) + // open tag
-            //Tag("Seq") // open sequence
-            //;
-            R"xx(<hdrgm:)xx" + item + R"xx(>)xx" + // open tag
-            ws + R"xx(<rdf:Seq>)xx"; // open sequence
+        // open tags
+        std::string pat2 = Tag("hdrgm",item) + Tag("rdf","Seq");
 
+        const auto linum = Tag("rdf","li") + R"xx((\d+(\.\d+)?))xx" + Tag("rdf","li",false);
+        pat2 += linum + linum + linum;
 
-        //pat2 += item;
-        //pat2 += R"xx(>)xx";
-    	//pat2 += ws + R"xx(<rdf:Seq>)xx";
-        std::string rdf = R"xx([\n\t\r ]*<rdf:li>(\d+(\.\d+)?)</rdf:li>)xx";
-    	//pat2 += R"xx([\n\t\r ]*)xx";
-        //pat2 += R"xx(<rdf:li>)xx";
-        //pat2 += R"xx((\d+(\.\d+)?))xx";
-        //pat2 += R"xx(</rdf:li>)xx";
-        pat2 += ws + rdf;
-        pat2 += ws + rdf;
-        pat2 += ws + rdf;
-        //pat2 += Tag("Seq",false);
-        pat2 += ws + R"xx(</rdf:Seq>)xx";
-        pat2 += ws + R"xx(</hdrgm:)xx";
-        pat2 += item + R"xx(>)xx";
+        pat2 += Tag("rdf","Seq",false);
+        pat2 += Tag("hdrgm", item, false);
 
-        //        pat2 += num + num + num;
-//        pat2 += R"([\n\r\t ]*<\/rdf:Seq>[\r\n\t ]*<\/hdrgm:)";
-//        pat2 += item;
-//        pat2 += R"(>)";
         auto trip = pat2;
-        //trip = R"xx(<hdrgm:GainMapMax>)xx";
-#else
-
-#endif
-        // std::cout << trip << std::endl;
-        
     	
         std::string sing = R"xx(hdrgm:)xx";
         sing += item;
         sing += R"xx(="([-+]?\d+(\.\d+)?)")xx";
         
-//        auto singleMatch = std::regex_search(text, match, std::regex{ "hdrgm:" + item + "=\"([-+]?\\d+(\\.\\d+)?)\"" });
         auto singleMatch = std::regex_search(text, match, std::regex{ sing });
-        //std::cout << "HDR Sing " << singleMatch << std::endl;
         auto vectorMatch = singleMatch || std::regex_search(text, match, std::regex{ trip });
-        if (singleMatch && match.size()>0)
+        if (singleMatch && match.size()>1)
         {
             // todo - error checking
-          //  std::cout << "HDR SINGLE MATCH size " << match.size() << " val " << match.str(1) << "\n";
             values.push_back(std::stod(match.str(1)));
             return true;
         }
         if (vectorMatch && match.size() == 7)
         {
+            // todo - error checking
             values.push_back(std::stod(match.str(1)));
             values.push_back(std::stod(match.str(3)));
             values.push_back(std::stod(match.str(5)));
-          //  std::cout << "HDR VECTOR MATCH size " << match.size() << " val "  << match.str(0) << "\n";
-          //  std::cout << "  vals " << values[0] << ',' << values[1] << ',' << values[2] << std::endl;
+            std::cout << "HDR VECTOR MATCH size " << match.size() << " val "  << match.str(0) << "\n";
+            std::cout << "  vals " << values[0] << ',' << values[1] << ',' << values[2] << std::endl;
             return true;
         }
         if (!required)
@@ -202,10 +174,10 @@ private:
         return false;
     }
 
-    static std::string Tag(const std::string & tag, bool open=true)
+    static std::string Tag(const char * ns, const std::string & tag, bool open=true)
     {
         const std::string ws = R"xx([\n\t\r ]*)xx"; // whitespace
-        return ws + (open ? "<" : "</") + "hdrgm:" + tag + ">";
+        return ws + (open ? "<" : "</") + ns + ":" + tag + ">";
     }
 
 };
