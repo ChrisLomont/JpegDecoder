@@ -128,8 +128,6 @@ namespace Lomont::Jpeg
     // jpeg decoder struct
     struct JpegDecoder : Logger
     {
-        JpegDecoder() : image(make_shared<Image>()) {}
-
         vector<uint8_t> d;
         int offset;
         uint8_t read()
@@ -144,7 +142,10 @@ namespace Lomont::Jpeg
         Tree tree[2][2]; // 0 = DC, 1 = AC, then 0 = Y, 1 = CbCr
         vector<uint16_t> qtbls[4]; // quantization tables
 
-        shared_ptr<Image> image;
+        // decoded images
+        vector<shared_ptr<Image>> images;
+        UltraHdr hdr; // hdr info
+        shared_ptr<Image> GetImage() { return images.back(); }
 
         int lastCode = -1;
         uint16_t seg;
@@ -382,7 +383,7 @@ namespace Lomont::Jpeg
         int h = read2(dec); // pixel size
         int w = read2(dec);
         int channels = dec.read(); // 1 = gray, 3 = YCbCr or YIQ, 4 = CMYK rare
-        dec.image->Resize(w, h, channels);
+        dec.GetImage()->Resize(w, h, channels);
         dec.logi(format("   {}x{} {} channels, {} bits/sample\n", w, h, channels, bitsPerSample));
         if (dec.channels == 4)
             dec.loge("4 channel CMYK JPEG not supported\n");
@@ -714,9 +715,9 @@ namespace Lomont::Jpeg
 
         // MCU pixel width is 8 * hmax, so we want total image width X to be a multiple of this
         // compute based on required imge, round up to multiple of 8*hmax, then scale back to pixels
-        const int X = (8 * hmax) * ((dec.image->w + 8 * hmax - 1) / (8 * hmax));
+        const int X = (8 * hmax) * ((dec.GetImage()->w + 8 * hmax - 1) / (8 * hmax));
         // similarly...
-        const int Y = (8 * vmax) * ((dec.image->h + 8 * vmax - 1) / (8 * vmax));
+        const int Y = (8 * vmax) * ((dec.GetImage()->h + 8 * vmax - 1) / (8 * vmax));
 
 
         int xi[4], yi[4]; // pixel size of ith component
@@ -843,7 +844,7 @@ namespace Lomont::Jpeg
                 // decode MCU into final pixels
                 DecodeMCU(
                     buffers,
-                    *(dec.image),
+                    *(dec.GetImage()),
                     destX, destY,
                     hmax * 8, vmax * 8,
                     hi, vi,
@@ -990,7 +991,7 @@ namespace Lomont::Jpeg
         vector<uint8_t> data, input;
         ReadSegment(dec, input);
 
-        bool hasAd = false;;
+        bool hasAd = false;
 
         string exifHeader = "Exif\0\0"s; // use C++ string literal with 2 embedded nulls
         string ans = "http://ns.adobe.com/xmp/extension/\0"s;
@@ -1014,9 +1015,11 @@ namespace Lomont::Jpeg
             {
                 success = dec.xmpDecoder(dec, data);
                 if (success)
-                {
-                    UltraHdr hdr;
-                    hdr.ParseXmp(dec, data);
+                { // try hdr, only one time
+                    if (!dec.hdr.hasUltraHdr) // have not seen one yet
+                    {
+                        dec.hdr.ParseXmp(dec, data);
+                    }
                 }
             }
         }
@@ -1276,6 +1279,7 @@ namespace Lomont::Jpeg
     {
         bool moreBytes = false;
         do { // loop over MultiPictureFormat when present
+            dec.images.emplace_back(make_shared<Image>()); // possibly new image
             moreBytes = false; // assume no extra
             bool more = true;
             bool sawEOI = false;
@@ -1326,13 +1330,11 @@ namespace Lomont::Jpeg
         return true;
     }
 
-    void WritePPM(const std::string& filename, const JpegDecoder& dec)
+    void WritePPM(const std::string& filename, const shared_ptr<Image> & img)
     { // https://netpbm.sourceforge.net/doc/ppm.html
-
-        const auto& img = dec.image;
         ofstream file(filename);
         file << "P3\n"; // color 24 bit, ASCII
-        file << "# example image, Chris Lomont jpeg decoder\n";
+        file << "# Chris Lomont jpeg decoder output\n";
         file << img->w << " " << img->h << "\n"; // width height
         file << 255 << endl; // max value
         auto p = img->data.data();
@@ -1348,7 +1350,6 @@ namespace Lomont::Jpeg
                 file << "\n";
         }
         file.close();
-        cout << filename << " written\n";
     }
 
 

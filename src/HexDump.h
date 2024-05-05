@@ -39,7 +39,7 @@ void HexDump(const uint8_t * data, size_t byteCount, std::ostream & os, size_t b
 				os << "   ";
 			}
 		}
-		os << '|';
+		os << " |";
 		for (size_t i = 0; i < bytesPerLine; ++i)
 		{
 			const auto address = offset + i;
@@ -50,6 +50,6 @@ void HexDump(const uint8_t * data, size_t byteCount, std::ostream & os, size_t b
 			}
 			os << ch;
 		}
-		os << "\n";
+		os << "|\n";
 	}
 }

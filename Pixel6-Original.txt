@@ -1,0 +1,10 @@
+HDR info for HDR/Pixel6-Original.jpg
+Version       : 1
+BaseRenditionIsHDR: false
+GainMapMin    : 0
+GainMapMax    : 1.113907
+Gamma         : 1
+OffsetSDR     : 0
+OffsetHDR     : 0
+HDRCapacityMin: 0
+HDRCapacityMax: 1.113907
