@@ -46,15 +46,15 @@ void ProcessFiles(
 {
     set<fs::path> sorted_by_name;
 
-    const string ext = ".jpg";
-    if (pathOrFilename.ends_with(ext))
+    const string fsExt = ".jpg";
+    if (pathOrFilename.ends_with(fsExt))
     {
         sorted_by_name.insert(pathOrFilename);
     }
     else {
         for (auto& p : fs::recursive_directory_iterator(pathOrFilename))
         {
-            auto ext = p.path().extension();
+            const auto ext = p.path().extension();
             if (ext == ".jpg")
                 sorted_by_name.insert(p.path());
         }

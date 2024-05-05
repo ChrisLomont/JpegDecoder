@@ -3,7 +3,6 @@
 // simple hex dump
 
 #include <ostream>
-#include <string>
 
 // buffer in, length in, stream in
 // optional width of line, optional splitter
