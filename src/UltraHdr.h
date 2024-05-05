@@ -130,26 +130,21 @@ private:
 			</hdrgm:GainMapMin>
          */
 
-        std::string ws = R"xx([\n\t\r ]*)xx"; // whitespace
-        std::string num = R"xx([\n\r\t ]*<rdf:li>([+-]\d+(\.\d+)?)</rdf:li>)xx"; // grouped number
+        const std::string num = R"xx((\d+(\.\d+)?))xx"; // grouped number
+        const auto linum = Tag("rdf", "li") + num + Tag("rdf", "li", false);
+
 
         // open tags
-        std::string pat2 = Tag("hdrgm",item) + Tag("rdf","Seq");
-
-        const auto linum = Tag("rdf","li") + R"xx((\d+(\.\d+)?))xx" + Tag("rdf","li",false);
-        pat2 += linum + linum + linum;
-
-        pat2 += Tag("rdf","Seq",false);
-        pat2 += Tag("hdrgm", item, false);
-
-        auto trip = pat2;
+        std::string tripleRegex = Tag("hdrgm",item) + Tag("rdf","Seq");
+        tripleRegex += linum + linum + linum;
+        tripleRegex += Tag("rdf","Seq",false) + Tag("hdrgm", item, false);
     	
-        std::string sing = R"xx(hdrgm:)xx";
-        sing += item;
-        sing += R"xx(="([-+]?\d+(\.\d+)?)")xx";
+        std::string singleRegex = R"xx(hdrgm:)xx";
+        singleRegex += item;
+        singleRegex += R"xx(="([-+]?\d+(\.\d+)?)")xx";
         
-        auto singleMatch = std::regex_search(text, match, std::regex{ sing });
-        auto vectorMatch = singleMatch || std::regex_search(text, match, std::regex{ trip });
+        auto singleMatch = std::regex_search(text, match, std::regex{ singleRegex });
+        auto vectorMatch = singleMatch || std::regex_search(text, match, std::regex{ tripleRegex });
         if (singleMatch && match.size()>1)
         {
             // todo - error checking
