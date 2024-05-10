@@ -144,6 +144,7 @@ namespace Lomont::Jpeg
 
         // decoded images
         vector<shared_ptr<Image>> images;
+        vector<uint64_t> splitOffsets;
         UltraHdr hdr; // hdr info
         shared_ptr<Image> GetImage() { return images.back(); }
 
@@ -877,10 +878,6 @@ namespace Lomont::Jpeg
                 }
 
             } // end of all MCU decoded
-
-
-
-
             // The remaining bits, if any, in the scan data are discarded as
             // they're added byte align the scan data.
 
@@ -919,9 +916,8 @@ namespace Lomont::Jpeg
         auto ss = dec.read(); // Ss - where to put first DC coeff, should be 0 in baseline
         auto se = dec.read(); // Se - last DC coeff in block, should be 63 in baseline
         auto bp = dec.read(); // Ah,Al - bit approximation stuff, should be 0,0 in baseline
-        if (ss != 0 || se != 64 || bp != 0)
-            dec.logw("Weird skip entries in SOS\n");
-        //assert(ss == 0 && se == 63 && bp == 0);
+        if (ss != 0 || se != 63 || bp != 0)
+            dec.logw(format("Weird skip entries in SOS: ss {} != 0 OR se {} != 63 OR bp {} != 0\n",ss,se,bp));
 
         DecodeImg(dec);
 
@@ -1279,6 +1275,8 @@ namespace Lomont::Jpeg
     {
         bool moreBytes = false;
         do { // loop over MultiPictureFormat when present
+            dec.logi("\n\n"); // space before next file
+
             dec.images.emplace_back(make_shared<Image>()); // possibly new image
             moreBytes = false; // assume no extra
             bool more = true;
@@ -1326,6 +1324,7 @@ namespace Lomont::Jpeg
             if (!sawEOI)
                 dec.logw("Did not parse EOI marker\n");
 
+        	dec.splitOffsets.push_back(dec.offset);
         } while (moreBytes);
         return true;
     }
@@ -1352,6 +1351,25 @@ namespace Lomont::Jpeg
         file.close();
     }
 
+    // splits a multipart file at the end of image markers
+    // useful for splitting multipart files
+    void SplitMultipartFile(const string & filename, const string & filePrefix, const JpegDecoder& dec)
+    {
+        ifstream instream(filename, ios::in | ios::binary);
+        size_t pos = 0;
+        for (size_t i = 0; i < dec.splitOffsets.size(); ++i)
+        {
+            auto next = dec.splitOffsets[i];
+            auto len = next - pos;
+            vector<char> buffer(len);
+            instream.read(buffer.data(), len);
+
+            std::ofstream output(format("{}_split_{}.jpg",filePrefix,i), std::ios::binary);
+            output.write(buffer.data(), len);
+            output.close();
+            pos = next;
+        }
+    }
 
     void Decode(string filename, JpegDecoder& dec)
     {

@@ -79,7 +79,11 @@ void ProcessFiles(
             {
                 WritePPMs(fn, dec);
                 if (dec.hdr.hasUltraHdr)
+                {
                     WriteHDRInfo(fn, dec.hdr);
+                    const auto filestem = fs::path(fn).stem().string(); // path/and/filename_stem
+                    SplitMultipartFile(fn, filestem, dec);
+                }
             }
         }
         catch (exception& e)
@@ -105,47 +109,13 @@ void ProcessFiles(
     cout << format("{} files, {} with errors\n", fileCount, errorCount);
 }
 
-void TestReg()
-{
-//    string pat = R"(<hdrgm:GainMapMin>[\n\t\r ]*<rdf:Seq>([\n\r\t ]*<rdf:li>[+\-0-9\.]+<\/rdf:li>)+[\n\r\t ]*<\/rdf:Seq>[\r\n\t ]*<\/hdrgm:GainMapMin>)";
-    string ws = R"([\n\t\r ]*)"; // whitespace
-    string num = R"([\n\r\t ]*<rdf:li>([+-]\d+(\.\d+)?)<\/rdf:li>)"; // grouped number
-    string item = "GainMapMax";
-    string pat2 =
-        R"(<hdrgm:)";
-    pat2 += item;
-	pat2 += R"(>[\n\t\r ]*<rdf:Seq>)";
-    pat2 += num + num + num;
-    pat2 += R"([\n\r\t ]*<\/rdf:Seq>[\r\n\t ]*<\/hdrgm:)";
-    pat2 += item;
-    pat2 += R"(>)";
-
-    string txt = 
-R"(<hdrgm:GainMapMax>
-	<rdf:Seq>
-		<rdf:li>-0.07811</rdf:li>
-		<rdf:li>-0.049089</rdf:li>
-		<rdf:li>-0.028652</rdf:li>
-	</rdf:Seq>
-</hdrgm:GainMapMax>)";
-    smatch sm;
-    bool ret = regex_match(txt, sm, regex{pat2});
-    cout << format("REG {} {}",ret,sm.size());
-    for (auto& s : sm)
-        cout << s << endl;
-    
-}
-
 int main(int argc, char * argv[])
 {
-   // TestReg();
-    //return 0;
-
     // if name ends in jpg, does one file, else does recursive directory 
     auto processLocation = "jpegtests";
 
     LogType minLevel = LogType::INFO;
-    bool transcodeFile = false; // saves as filename.ppm
+    bool transcodeFile = true; // saves as filename.ppm
     bool dumpOnErrorOnly = false;
 
     if (argc > 1)
@@ -155,8 +125,8 @@ int main(int argc, char * argv[])
     }
 
     // HDR testing
-    //processLocation = "HDR/Pixel6-Original.jpg"; // 4080x3072x3 (Y,Cb,Cr), 1020x768x1 (Y) 
-    processLocation = "HDR/Pixel6-LR-HDR-1.jpg"; // 4064x3056x3 8 bits (??,Y,Cb), 4064x3056x3 8 bits (??,Y,Cb) (Lightroom 3 channel HDR)
+    processLocation = "HDR/Pixel6-Original.jpg"; // 4080x3072x3 (Y,Cb,Cr), 1020x768x1 (Y) 
+    //processLocation = "HDR/Pixel6-LR-HDR-1.jpg"; // 4064x3056x3 8 bits (??,Y,Cb), 4064x3056x3 8 bits (??,Y,Cb) (Lightroom 3 channel HDR)
 
     ProcessFiles(
         processLocation,
